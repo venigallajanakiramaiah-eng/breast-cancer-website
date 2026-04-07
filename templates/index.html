@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breast Cancer Prediction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Breast Cancer Prediction System</h1>
+        <p class="subtitle">
+            This project predicts whether a breast tumor is benign or malignant using machine learning.
+        </p>
+
+        {% if prediction_text %}
+        <div class="message-box">
+            <h2>{{ prediction_text }}</h2>
+            {% if confidence_text %}
+            <p>{{ confidence_text }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if files_ready %}
+        <form action="/predict" method="post">
+            <div class="form-grid">
+                {% for feature in features %}
+                <div class="form-group">
+                    <label for="{{ feature }}">{{ feature.replace('_', ' ').title() }}</label>
+                    <input type="number" step="any" name="{{ feature }}" id="{{ feature }}" required>
+                </div>
+                {% endfor %}
+            </div>
+
+            <button type="submit">Predict</button>
+        </form>
+        {% else %}
+        <div class="warning-box">
+            <p>Please run <strong>python train_model.py</strong> first.</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
