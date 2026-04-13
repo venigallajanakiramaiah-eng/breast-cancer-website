@@ -7,39 +7,159 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>Breast Cancer Prediction System</h1>
-        <p class="subtitle">
-            This project predicts whether a breast tumor is benign or malignant using machine learning.
-        </p>
+    <div class="page">
+        <div class="hero">
+            <div>
+                <h1>Breast Cancer Prediction System</h1>
+                <p>
+                    This application uses machine learning, engineered features, validation,
+                    and risk scoring to support diagnosis prediction.
+                </p>
+            </div>
+            <div class="hero-badge">
+                <span>Best Model</span>
+                <strong>{{ best_model_name if best_model_name else "Not Ready" }}</strong>
+            </div>
+        </div>
 
         {% if prediction_text %}
-        <div class="message-box">
+        <div class="result-card {{ risk_class if risk_class else '' }}">
             <h2>{{ prediction_text }}</h2>
             {% if confidence_text %}
             <p>{{ confidence_text }}</p>
             {% endif %}
+            {% if malignant_probability %}
+            <p>Malignant Probability: {{ malignant_probability }}</p>
+            {% endif %}
+            {% if risk_level %}
+            <p><strong>Risk Level:</strong> {{ risk_level }}</p>
+            {% endif %}
+            {% if top_factors %}
+            <div class="factors">
+                <h3>Top Contributing Factors</h3>
+                <ul>
+                    {% for factor in top_factors %}
+                    <li>{{ factor }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 
-        {% if files_ready %}
-        <form action="/predict" method="post">
-            <div class="form-grid">
-                {% for feature in features %}
-                <div class="form-group">
-                    <label for="{{ feature }}">{{ feature.replace('_', ' ').title() }}</label>
-                    <input type="number" step="any" name="{{ feature }}" id="{{ feature }}" required>
-                </div>
+        {% if errors %}
+        <div class="alert error">
+            <h3>Please fix these issues</h3>
+            <ul>
+                {% for error in errors %}
+                <li>{{ error }}</li>
                 {% endfor %}
-            </div>
+            </ul>
+        </div>
+        {% endif %}
 
-            <button type="submit">Predict</button>
-        </form>
+        {% if not files_ready %}
+        <div class="alert warning">
+            <p><strong>Run this first:</strong> <code>python train_model.py</code></p>
+        </div>
         {% else %}
-        <div class="warning-box">
-            <p>Please run <strong>python train_model.py</strong> first.</p>
+        <div class="grid single-card-grid">
+            <div class="card">
+                <h2>Enter Patient Measurements</h2>
+
+                <div class="sample-buttons">
+                    {% for sample_name, sample_values in sample_data.items() %}
+                    <button type="button" class="secondary-btn" onclick='fillSample({{ sample_values|tojson }})'>
+                        {{ sample_name }}
+                    </button>
+                    {% endfor %}
+                    <button type="button" class="secondary-btn clear-btn" onclick="clearForm()">
+                        Clear
+                    </button>
+                </div>
+
+                <form action="/predict" method="post" id="predictionForm">
+                    <div class="form-grid">
+                        {% for feature in features %}
+                        <div class="form-group">
+                            <label for="{{ feature }}">{{ labels[feature] }}</label>
+                            <input
+                                type="number"
+                                step="any"
+                                id="{{ feature }}"
+                                name="{{ feature }}"
+                                value="{{ form_values.get(feature, '') if form_values else '' }}"
+                                required
+                            >
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <button type="submit" class="primary-btn">Predict</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card comparison-card">
+            <h2>Model Information</h2>
+            <p class="section-text">
+                Click the button below to view the comparison of machine learning models used in this project.
+            </p>
+
+            <button type="button" class="primary-btn toggle-btn" onclick="toggleComparison()">
+                Model Comparison
+            </button>
+
+            <div id="modelComparisonSection" class="hidden-section">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Accuracy</th>
+                            <th>Precision</th>
+                            <th>Recall</th>
+                            <th>F1</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for model_name, metrics in model_comparison.items() %}
+                        <tr class="{% if model_name == best_model_name %}best-row{% endif %}">
+                            <td>{{ model_name }}</td>
+                            <td>{{ metrics.accuracy }}</td>
+                            <td>{{ metrics.precision }}</td>
+                            <td>{{ metrics.recall }}</td>
+                            <td>{{ metrics.f1 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
         {% endif %}
     </div>
+
+    <script>
+        function fillSample(sample) {
+            Object.keys(sample).forEach(function(key) {
+                const input = document.getElementById(key);
+                if (input) {
+                    input.value = sample[key];
+                }
+            });
+        }
+
+        function clearForm() {
+            document.getElementById("predictionForm").reset();
+        }
+
+        function toggleComparison() {
+            const section = document.getElementById("modelComparisonSection");
+            if (section.style.display === "none" || section.style.display === "") {
+                section.style.display = "block";
+            } else {
+                section.style.display = "none";
+            }
+        }
+    </script>
 </body>
 </html>
