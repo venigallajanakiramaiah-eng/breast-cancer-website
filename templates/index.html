@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Breast Cancer Prediction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="page">
@@ -13,7 +14,7 @@
                 <h1>Breast Cancer Prediction System</h1>
                 <p>
                     This application uses machine learning, engineered features, validation,
-                    and risk scoring to support diagnosis prediction.
+                    and elegant visual analytics to support diagnosis prediction.
                 </p>
             </div>
             <div class="hero-badge">
@@ -24,26 +25,36 @@
 
         {% if prediction_text %}
         <div class="result-card {{ risk_class if risk_class else '' }}">
-            <h2>{{ prediction_text }}</h2>
-            {% if confidence_text %}
-            <p>{{ confidence_text }}</p>
-            {% endif %}
-            {% if malignant_probability %}
-            <p>Malignant Probability: {{ malignant_probability }}</p>
-            {% endif %}
-            {% if risk_level %}
-            <p><strong>Risk Level:</strong> {{ risk_level }}</p>
-            {% endif %}
-            {% if top_factors %}
-            <div class="factors">
-                <h3>Top Contributing Factors</h3>
-                <ul>
-                    {% for factor in top_factors %}
-                    <li>{{ factor }}</li>
-                    {% endfor %}
-                </ul>
+            <div class="result-summary">
+                <div class="result-text">
+                    <h2>{{ prediction_text }}</h2>
+                    {% if confidence_text %}
+                    <p>{{ confidence_text }}</p>
+                    {% endif %}
+                    {% if malignant_probability is not none %}
+                    <p>Malignant Probability: {{ malignant_probability }}%</p>
+                    {% endif %}
+                    {% if risk_level %}
+                    <p><strong>Risk Level:</strong> {{ risk_level }}</p>
+                    {% endif %}
+                    {% if top_factors %}
+                    <div class="factors">
+                        <h3>Top Contributing Factors</h3>
+                        <ul>
+                            {% for factor in top_factors %}
+                            <li>{{ factor }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if malignant_probability is not none %}
+                <div class="gauge-wrap">
+                    <canvas id="riskGauge"></canvas>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
         {% endif %}
 
@@ -99,6 +110,26 @@
                 </form>
             </div>
         </div>
+
+        {% if chart_data %}
+        <div class="charts-grid">
+            <div class="card chart-card">
+                <h2>Feature Importance</h2>
+                <p class="section-text">Polar view of the most influential input features.</p>
+                <div class="chart-wrap">
+                    <canvas id="featureImportanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card chart-card">
+                <h2>Input vs Average Comparison</h2>
+                <p class="section-text">Radar comparison of patient values against dataset averages.</p>
+                <div class="chart-wrap">
+                    <canvas id="inputAverageRadar"></canvas>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="card comparison-card">
             <h2>Model Information</h2>
@@ -161,5 +192,163 @@
             }
         }
     </script>
+
+    {% if chart_data %}
+    <script>
+        const chartData = {{ chart_data | tojson }};
+        const malignantProbability = {{ malignant_probability if malignant_probability is not none else 0 }};
+
+        const centerTextPlugin = {
+            id: 'centerTextPlugin',
+            afterDraw(chart, args, pluginOptions) {
+                if (chart.canvas.id !== 'riskGauge') return;
+
+                const { ctx } = chart;
+                const meta = chart.getDatasetMeta(0);
+                if (!meta || !meta.data || !meta.data.length) return;
+
+                const x = meta.data[0].x;
+                const y = meta.data[0].y;
+
+                ctx.save();
+                ctx.font = 'bold 28px Arial';
+                ctx.fillStyle = '#0f172a';
+                ctx.textAlign = 'center';
+                ctx.fillText(malignantProbability.toFixed(1) + '%', x, y - 10);
+
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('Risk Meter', x, y + 18);
+                ctx.restore();
+            }
+        };
+
+        Chart.register(centerTextPlugin);
+
+        new Chart(document.getElementById('riskGauge'), {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [malignantProbability, 100 - malignantProbability],
+                    backgroundColor: [
+                        malignantProbability >= 80 ? '#dc2626' :
+                        malignantProbability >= 50 ? '#f59e0b' : '#16a34a',
+                        '#e5e7eb'
+                    ],
+                    borderWidth: 0,
+                    cutout: '75%'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                rotation: -90,
+                circumference: 180,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('featureImportanceChart'), {
+            type: 'polarArea',
+            data: {
+                labels: chartData.importance_labels,
+                datasets: [{
+                    data: chartData.importance_values,
+                    backgroundColor: [
+                        'rgba(59, 130, 246, 0.75)',
+                        'rgba(14, 165, 233, 0.72)',
+                        'rgba(99, 102, 241, 0.72)',
+                        'rgba(168, 85, 247, 0.70)',
+                        'rgba(236, 72, 153, 0.70)',
+                        'rgba(16, 185, 129, 0.72)'
+                    ],
+                    borderColor: '#ffffff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            boxWidth: 14,
+                            padding: 14
+                        }
+                    }
+                },
+                scales: {
+                    r: {
+                        ticks: {
+                            display: false
+                        },
+                        grid: {
+                            color: 'rgba(148, 163, 184, 0.25)'
+                        }
+                    }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('inputAverageRadar'), {
+            type: 'radar',
+            data: {
+                labels: chartData.avg_labels,
+                datasets: [
+                    {
+                        label: 'Patient',
+                        data: chartData.radar_patient,
+                        borderColor: '#0f4c81',
+                        backgroundColor: 'rgba(15, 76, 129, 0.18)',
+                        pointBackgroundColor: '#0f4c81',
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Average',
+                        data: chartData.radar_average,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                        pointBackgroundColor: '#f59e0b',
+                        pointRadius: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    r: {
+                        min: 0,
+                        max: 100,
+                        ticks: {
+                            display: false
+                        },
+                        angleLines: {
+                            color: 'rgba(148, 163, 184, 0.25)'
+                        },
+                        grid: {
+                            color: 'rgba(148, 163, 184, 0.25)'
+                        },
+                        pointLabels: {
+                            font: {
+                                size: 11
+                            },
+                            color: '#334155'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+    {% endif %}
 </body>
 </html>

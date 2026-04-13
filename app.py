@@ -22,35 +22,24 @@ EPSILON = 1e-6
 
 def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-
     out["area_perimeter_ratio_mean"] = out["area_mean"] / (out["perimeter_mean"] + EPSILON)
     out["area_perimeter_ratio_worst"] = out["area_worst"] / (out["perimeter_worst"] + EPSILON)
     out["radius_gap"] = out["radius_worst"] - out["radius_mean"]
     out["concavity_score"] = out["concavity_mean"] + out["concavity_worst"]
     out["concave_points_gap"] = out["concave points_worst"] - out["concave points_mean"]
-
     return out
 
 
 def load_artifacts():
-    model = joblib.load("model.pkl")
-    scaler = joblib.load("scaler.pkl")
-    input_features = joblib.load("input_features.pkl")
-    model_features = joblib.load("model_features.pkl")
-    feature_importances = joblib.load("feature_importances.pkl")
-    model_comparison = joblib.load("model_comparison.pkl")
-    feature_ranges = joblib.load("feature_ranges.pkl")
-    best_model_name = joblib.load("best_model_name.pkl")
-
     return {
-        "model": model,
-        "scaler": scaler,
-        "input_features": input_features,
-        "model_features": model_features,
-        "feature_importances": feature_importances,
-        "model_comparison": model_comparison,
-        "feature_ranges": feature_ranges,
-        "best_model_name": best_model_name,
+        "model": joblib.load("model.pkl"),
+        "scaler": joblib.load("scaler.pkl"),
+        "input_features": joblib.load("input_features.pkl"),
+        "model_features": joblib.load("model_features.pkl"),
+        "feature_importances": joblib.load("feature_importances.pkl"),
+        "model_comparison": joblib.load("model_comparison.pkl"),
+        "feature_ranges": joblib.load("feature_ranges.pkl"),
+        "best_model_name": joblib.load("best_model_name.pkl"),
     }
 
 
@@ -142,6 +131,67 @@ def validate_inputs(form_data, input_features, feature_ranges):
     return errors, values
 
 
+def build_chart_data(values, feature_ranges, feature_importances):
+    """
+    Build patient-specific chart data.
+
+    Feature importance chart is based on:
+    distance from average × model importance
+    so it changes for each patient input.
+    """
+    input_feature_names = list(values.keys())
+
+    avg_labels = [to_label(f) for f in input_feature_names]
+    patient_values = [float(values[f]) for f in input_feature_names]
+    average_values = [float(feature_ranges[f]["mean"]) for f in input_feature_names]
+
+    radar_patient = []
+    radar_average = []
+    local_influence_scores = []
+
+    for feature in input_feature_names:
+        min_v = float(feature_ranges[feature]["min"])
+        max_v = float(feature_ranges[feature]["max"])
+        mean_v = float(feature_ranges[feature]["mean"])
+        user_v = float(values[feature])
+
+        denominator = max(max_v - min_v, 1e-6)
+
+        # Scale to 0-100 for radar chart
+        patient_scaled = ((user_v - min_v) / denominator) * 100
+        average_scaled = ((mean_v - min_v) / denominator) * 100
+
+        radar_patient.append(round(patient_scaled, 2))
+        radar_average.append(round(average_scaled, 2))
+
+        # Patient-specific influence score
+        distance_from_average = abs(user_v - mean_v) / denominator
+        importance_weight = float(feature_importances.get(feature, 0.0))
+        influence_score = distance_from_average * importance_weight
+
+        local_influence_scores.append((feature, influence_score))
+
+    # Top 6 patient-specific influential features
+    local_influence_scores = sorted(
+        local_influence_scores,
+        key=lambda item: item[1],
+        reverse=True
+    )[:6]
+
+    importance_labels = [to_label(k) for k, _ in local_influence_scores]
+    importance_values = [round(float(v), 4) for _, v in local_influence_scores]
+
+    return {
+        "importance_labels": importance_labels,
+        "importance_values": importance_values,
+        "avg_labels": avg_labels,
+        "radar_patient": radar_patient,
+        "radar_average": radar_average,
+        "raw_patient_values": patient_values,
+        "raw_average_values": average_values,
+    }
+
+
 @app.route("/")
 def home():
     if not files_ready():
@@ -163,6 +213,7 @@ def home():
         best_model_name=artifacts["best_model_name"],
         sample_data=get_sample_data(),
         form_values={},
+        chart_data=None,
     )
 
 
@@ -195,9 +246,13 @@ def predict():
             sample_data=get_sample_data(),
             errors=errors,
             form_values=request.form,
+            chart_data=None,
         )
 
+    # Base input dataframe
     base_df = pd.DataFrame([values])
+
+    # Create model input with engineered features
     model_df = add_engineered_features(base_df)
     model_df = model_df[model_features]
 
@@ -225,11 +280,31 @@ def predict():
         risk_level = "Low Risk"
         risk_class = "low"
 
-    # Simple prediction explanation using standardized magnitude × feature importance
-    importance_series = pd.Series(artifacts["feature_importances"])
-    scaled_series = pd.Series(np.abs(input_scaled[0]), index=model_features)
-    contribution_scores = (importance_series * scaled_series).sort_values(ascending=False)
-    top_factors = [to_label(name) for name in contribution_scores.head(3).index.tolist()]
+    # Patient-specific top contributing factors
+    top_factor_scores = []
+
+    for feature in input_features:
+        min_v = float(artifacts["feature_ranges"][feature]["min"])
+        max_v = float(artifacts["feature_ranges"][feature]["max"])
+        mean_v = float(artifacts["feature_ranges"][feature]["mean"])
+        user_v = float(values[feature])
+
+        denominator = max(max_v - min_v, 1e-6)
+        distance_from_average = abs(user_v - mean_v) / denominator
+        importance_weight = float(artifacts["feature_importances"].get(feature, 0.0))
+        score = distance_from_average * importance_weight
+
+        top_factor_scores.append((feature, score))
+
+    top_factor_scores = sorted(top_factor_scores, key=lambda x: x[1], reverse=True)
+    top_factors = [to_label(name) for name, _ in top_factor_scores[:3]]
+
+    # Build dynamic chart data
+    chart_data = build_chart_data(
+        values=values,
+        feature_ranges=artifacts["feature_ranges"],
+        feature_importances=artifacts["feature_importances"],
+    )
 
     return render_template(
         "index.html",
@@ -242,13 +317,14 @@ def predict():
         form_values=values,
         prediction_text=prediction_text,
         confidence_text=f"Confidence: {confidence}%",
-        malignant_probability=f"{malignant_probability:.2f}%",
+        malignant_probability=round(malignant_probability, 2),
         risk_level=risk_level,
         risk_class=risk_class,
         top_factors=top_factors,
+        chart_data=chart_data,
     )
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5001))
+    port = int(os.environ.get("PORT", 5002))
     app.run(host="0.0.0.0", port=port, debug=False)
