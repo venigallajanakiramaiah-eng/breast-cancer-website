@@ -119,7 +119,8 @@ input:focus {
 }
 
 .primary-btn,
-.secondary-btn {
+.secondary-btn,
+.download-btn {
     border: none;
     border-radius: 12px;
     cursor: pointer;
@@ -137,6 +138,19 @@ input:focus {
 
 .primary-btn:hover {
     background: #0c3e6a;
+}
+
+.download-btn {
+    margin-top: 14px;
+    width: 100%;
+    padding: 14px;
+    background: #16a34a;
+    color: white;
+    font-size: 16px;
+}
+
+.download-btn:hover {
+    background: #15803d;
 }
 
 .toggle-btn {

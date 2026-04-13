@@ -14,7 +14,7 @@
                 <h1>Breast Cancer Prediction System</h1>
                 <p>
                     This application uses machine learning, engineered features, validation,
-                    and elegant visual analytics to support diagnosis prediction.
+                    elegant visual analytics, and downloadable PDF reporting.
                 </p>
             </div>
             <div class="hero-badge">
@@ -108,6 +108,19 @@
 
                     <button type="submit" class="primary-btn">Predict</button>
                 </form>
+
+                {% if prediction_text %}
+                <form action="/download-report" method="post" id="downloadForm">
+                    {% for feature in features %}
+                    <input
+                        type="hidden"
+                        name="{{ feature }}"
+                        value="{{ form_values.get(feature, '') if form_values else '' }}"
+                    >
+                    {% endfor %}
+                    <button type="submit" class="download-btn">Download Prediction Report</button>
+                </form>
+                {% endif %}
             </div>
         </div>
 
@@ -115,7 +128,7 @@
         <div class="charts-grid">
             <div class="card chart-card">
                 <h2>Feature Importance</h2>
-                <p class="section-text">Polar view of the most influential input features.</p>
+                <p class="section-text">Patient-specific feature influence view.</p>
                 <div class="chart-wrap">
                     <canvas id="featureImportanceChart"></canvas>
                 </div>
@@ -200,7 +213,7 @@
 
         const centerTextPlugin = {
             id: 'centerTextPlugin',
-            afterDraw(chart, args, pluginOptions) {
+            afterDraw(chart) {
                 if (chart.canvas.id !== 'riskGauge') return;
 
                 const { ctx } = chart;
@@ -283,12 +296,8 @@
                 },
                 scales: {
                     r: {
-                        ticks: {
-                            display: false
-                        },
-                        grid: {
-                            color: 'rgba(148, 163, 184, 0.25)'
-                        }
+                        ticks: { display: false },
+                        grid: { color: 'rgba(148, 163, 184, 0.25)' }
                     }
                 }
             }
@@ -321,27 +330,17 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        position: 'top'
-                    }
+                    legend: { position: 'top' }
                 },
                 scales: {
                     r: {
                         min: 0,
                         max: 100,
-                        ticks: {
-                            display: false
-                        },
-                        angleLines: {
-                            color: 'rgba(148, 163, 184, 0.25)'
-                        },
-                        grid: {
-                            color: 'rgba(148, 163, 184, 0.25)'
-                        },
+                        ticks: { display: false },
+                        angleLines: { color: 'rgba(148, 163, 184, 0.25)' },
+                        grid: { color: 'rgba(148, 163, 184, 0.25)' },
                         pointLabels: {
-                            font: {
-                                size: 11
-                            },
+                            font: { size: 11 },
                             color: '#334155'
                         }
                     }

@@ -10,7 +10,6 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-# These are the 10 user-input fields shown on the website
 INPUT_FEATURES = [
     "perimeter_worst",
     "area_worst",
@@ -28,36 +27,29 @@ EPSILON = 1e-6
 
 
 def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Create new useful features from the 10 user-input fields."""
     out = df.copy()
-
     out["area_perimeter_ratio_mean"] = out["area_mean"] / (out["perimeter_mean"] + EPSILON)
     out["area_perimeter_ratio_worst"] = out["area_worst"] / (out["perimeter_worst"] + EPSILON)
     out["radius_gap"] = out["radius_worst"] - out["radius_mean"]
     out["concavity_score"] = out["concavity_mean"] + out["concavity_worst"]
     out["concave_points_gap"] = out["concave points_worst"] - out["concave points_mean"]
-
     return out
 
 
-def main() -> None:
-    # Load dataset
+def main():
     df = pd.read_csv("breast-cancer.csv")
 
-    # Clean columns
     if "id" in df.columns:
         df = df.drop(columns=["id"])
 
     if "Unnamed: 32" in df.columns:
         df = df.drop(columns=["Unnamed: 32"])
 
-    # Convert target
     df["diagnosis"] = df["diagnosis"].map({"M": 1, "B": 0})
 
     if df["diagnosis"].isnull().any():
         raise ValueError("Diagnosis column contains unexpected values. Expected only M and B.")
 
-    # Keep only the 10 website input columns
     missing = [col for col in INPUT_FEATURES if col not in df.columns]
     if missing:
         raise ValueError(f"Missing expected columns in CSV: {missing}")
@@ -65,11 +57,9 @@ def main() -> None:
     X_base = df[INPUT_FEATURES].copy()
     y = df["diagnosis"].copy()
 
-    # Add engineered features for the model
     X_model = add_engineered_features(X_base)
-    MODEL_FEATURES = X_model.columns.tolist()
+    model_features = X_model.columns.tolist()
 
-    # Save realistic input ranges for validation
     feature_ranges = {}
     for col in INPUT_FEATURES:
         feature_ranges[col] = {
@@ -78,7 +68,6 @@ def main() -> None:
             "mean": float(X_base[col].mean()),
         }
 
-    # Split
     X_train_base, X_test_base, y_train, y_test = train_test_split(
         X_base,
         y,
@@ -90,12 +79,10 @@ def main() -> None:
     X_train = add_engineered_features(X_train_base)
     X_test = add_engineered_features(X_test_base)
 
-    # Scale features
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Compare multiple models
     models = {
         "Random Forest": RandomForestClassifier(n_estimators=300, random_state=42),
         "Decision Tree": DecisionTreeClassifier(random_state=42),
@@ -119,52 +106,31 @@ def main() -> None:
         }
         trained_models[name] = model
 
-    # Select best model by F1 score, then accuracy
     best_model_name = max(
         comparison,
         key=lambda name: (comparison[name]["f1"], comparison[name]["accuracy"])
     )
     best_model = trained_models[best_model_name]
 
-    # Use Random Forest feature importances for explanation
     explanation_model = RandomForestClassifier(n_estimators=300, random_state=42)
     explanation_model.fit(X_train_scaled, y_train)
     feature_importances = {
         feature: float(importance)
-        for feature, importance in zip(MODEL_FEATURES, explanation_model.feature_importances_)
+        for feature, importance in zip(model_features, explanation_model.feature_importances_)
     }
 
-    # Save artifacts
     joblib.dump(best_model, "model.pkl")
     joblib.dump(scaler, "scaler.pkl")
     joblib.dump(INPUT_FEATURES, "input_features.pkl")
-    joblib.dump(MODEL_FEATURES, "model_features.pkl")
+    joblib.dump(model_features, "model_features.pkl")
     joblib.dump(feature_importances, "feature_importances.pkl")
     joblib.dump(comparison, "model_comparison.pkl")
     joblib.dump(feature_ranges, "feature_ranges.pkl")
     joblib.dump(best_model_name, "best_model_name.pkl")
 
-    print("\nTraining completed successfully.")
+    print("Training completed successfully.")
     print(f"Best model selected: {best_model_name}")
-    print("\nModel comparison:")
-    for name, metrics in comparison.items():
-        print(
-            f"{name}: "
-            f"Accuracy={metrics['accuracy']}, "
-            f"Precision={metrics['precision']}, "
-            f"Recall={metrics['recall']}, "
-            f"F1={metrics['f1']}"
-        )
-
-    print("\nSaved files:")
-    print("- model.pkl")
-    print("- scaler.pkl")
-    print("- input_features.pkl")
-    print("- model_features.pkl")
-    print("- feature_importances.pkl")
-    print("- model_comparison.pkl")
-    print("- feature_ranges.pkl")
-    print("- best_model_name.pkl")
+    print("Saved all model artifacts.")
 
 
 if __name__ == "__main__":
